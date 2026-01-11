@@ -1,0 +1,694 @@
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+const Agency = require("../models/Agency.model");
+const Bus = require("../models/Bus.model");
+const User = require("../models/User.model");
+const Booking = require("../models/Booking.model");
+const Seat = require("../models/Seat.model");
+
+// Load environment variables
+dotenv.config();
+
+// Connect to database
+const connectDB = async () => {
+  try {
+    await mongoose.connect(
+      process.env.MONGODB_URI || "mongodb+srv://blessednur67:HOODQUAN67@cluster0.wftw5hq.mongodb.net/bus_booking_app?retryWrites=true&w=majority&appName=Cluster0"
+    );
+    console.log("✅ MongoDB Connected");
+  } catch (error) {
+    console.error("❌ MongoDB connection error:", error);
+    process.exit(1);
+  }
+};
+
+// Helper function to convert amenities array to our format
+const convertAmenities = (amenities) => {
+  const mapping = {
+    ac: "ac",
+    wifi: "wifi",
+    charging_ports: "charging",
+    charging: "charging",
+    reclining_seats: "reclining",
+    luggage: "luggage",
+    entertainment: "entertainment",
+    toilet: "toilet",
+    snacks: "snacks",
+  };
+
+  return amenities.map((a) => mapping[a] || a).filter(Boolean);
+};
+
+// Helper function to determine bus type
+const getBusType = (busClass) => {
+  const mapping = {
+    economy: "Economy",
+    standard: "Standard",
+    vip: "Luxury",
+  };
+  return mapping[busClass] || "Standard";
+};
+
+// Helper function to determine if VIP
+const isVIP = (busClass) => busClass === "vip";
+
+// Helper function to get price based on route and class
+const getPrice = (distanceKm, busClass, sampleRouteFares, route) => {
+  // First check if we have a specific fare for this route
+  const specificFare = sampleRouteFares.find(
+    (f) => f.route === route || f.route === route.split("-").reverse().join("-")
+  );
+
+  if (specificFare) {
+    return specificFare[busClass] || specificFare.standard;
+  }
+
+  // Otherwise use distance-based pricing
+  if (distanceKm < 200) {
+    const fareBands = { economy: 3500, standard: 4000, vip: 5000 };
+    return fareBands[busClass] || fareBands.standard;
+  } else if (distanceKm < 500) {
+    const fareBands = { economy: 6000, standard: 7000, vip: 9000 };
+    return fareBands[busClass] || fareBands.standard;
+  } else {
+    const fareBands = { economy: 11000, standard: 13000, vip: 16000 };
+    return fareBands[busClass] || fareBands.standard;
+  }
+};
+
+// Seed data
+const seedData = async () => {
+  try {
+    await connectDB();
+
+    // Clear existing data (optional - comment out if you want to keep existing data)
+    await Agency.deleteMany({});
+    await Bus.deleteMany({});
+    console.log("🗑️  Cleared existing data");
+
+    // Agencies data from Perplexity
+    const agenciesData = [
+      {
+        name: "Amour Mezam",
+        description:
+          "Reliable bus service connecting major cities in Cameroon, especially North-West region routes",
+        rating: 4.2,
+        amenities: convertAmenities([
+          "ac",
+          "reclining_seats",
+          "luggage",
+          "charging_ports",
+        ]),
+        contact: {
+          phone: "+237 233 36 37 55",
+          email: "contact@amourmezam.cm",
+          address: "Mile 2 / Sonac Street Parks, Bamenda",
+        },
+      },
+      {
+        name: "Finexs Voyages",
+        description:
+          "Premium express bus service with modern amenities including WiFi",
+        rating: 4.4,
+        amenities: convertAmenities([
+          "ac",
+          "wifi",
+          "reclining_seats",
+          "charging_ports",
+          "luggage",
+        ]),
+        contact: {
+          phone: "+237 691 81 92 90",
+          email: "info@finexs.cm",
+          address: "Mvan Interurban Park, Yaoundé",
+        },
+      },
+      {
+        name: "Touristique Express",
+        description:
+          "Long-distance bus service connecting northern regions of Cameroon",
+        rating: 4.0,
+        amenities: convertAmenities(["ac", "luggage", "entertainment"]),
+        contact: {
+          email: "info@touristiqueexpress.cm",
+          address: "Mvan Interurban Park, Yaoundé",
+        },
+      },
+      {
+        name: "General Express Voyages",
+        description: "Reliable transportation service for western regions",
+        rating: 4.0,
+        amenities: convertAmenities(["ac", "luggage"]),
+        contact: {
+          email: "contact@generalexpress.cm",
+          address: "Bonabéri Agencies Zone, Douala",
+        },
+      },
+      {
+        name: "Musango Bus Service",
+        description:
+          "Quality bus service specializing in South-West region routes",
+        rating: 4.3,
+        amenities: convertAmenities([
+          "ac",
+          "wifi",
+          "reclining_seats",
+          "charging_ports",
+          "luggage",
+        ]),
+        contact: {
+          email: "info@musangobus.com",
+          address: "Mile 17 Motor Park, Buea",
+        },
+      },
+      {
+        name: "United Express",
+        description:
+          "Modern bus service with premium amenities and online booking",
+        rating: 4.1,
+        amenities: convertAmenities([
+          "ac",
+          "wifi",
+          "charging_ports",
+          "luggage",
+        ]),
+        contact: {
+          email: "support@unitedexpress.cm",
+          website: "https://www.unitedexpress.cm",
+          address: "Village / Mboppi Area, Douala",
+        },
+      },
+      {
+        name: "Binam Voyages",
+        description:
+          "Affordable bus service connecting Yaoundé to western highlands",
+        rating: 3.8,
+        amenities: convertAmenities(["ac", "luggage"]),
+        contact: {
+          email: "info@binamvoyages.cm",
+          address: "Nsam / Post Central Area, Yaoundé",
+        },
+      },
+      {
+        name: "Moghamo Express",
+        description:
+          "Reliable transportation from Bamenda to major destinations",
+        rating: 4.0,
+        amenities: convertAmenities(["ac", "luggage"]),
+        contact: {
+          email: "contact@moghamoexpress.cm",
+          address: "Mile 2 / Sonac Street Parks, Bamenda",
+        },
+      },
+      {
+        name: "Garanti Express",
+        description:
+          "Comfortable bus service on Yaoundé-Douala and Yaoundé-Bafoussam routes",
+        rating: 3.9,
+        amenities: convertAmenities(["ac", "luggage"]),
+        contact: {
+          email: "info@garantiexpress.cm",
+          address: "Mvan Interurban Park, Yaoundé",
+        },
+      },
+      {
+        name: "Oasis Travel",
+        description: "Premium travel experience with VIP and standard options",
+        rating: 3.9,
+        amenities: convertAmenities([
+          "ac",
+          "reclining_seats",
+          "charging_ports",
+        ]),
+        contact: {
+          email: "support@oasistravel.cm",
+          address: "Village / Mboppi Area, Douala",
+        },
+      },
+    ];
+
+    const createdAgencies = await Agency.insertMany(agenciesData);
+    console.log(`✅ Seeded ${createdAgencies.length} agencies`);
+
+    // Create agency map for easy lookup
+    const agencyMap = {};
+    createdAgencies.forEach((agency) => {
+      agencyMap[agency.name.toLowerCase()] = agency._id;
+    });
+
+    // Routes data - Only popular routes for demo (7 routes = 14 directions)
+    const routesData = [
+      { from: "Yaoundé", to: "Douala", distanceKm: 245, durationMin: 210 },
+      { from: "Douala", to: "Yaoundé", distanceKm: 245, durationMin: 210 },
+      { from: "Yaoundé", to: "Bamenda", distanceKm: 380, durationMin: 420 },
+      { from: "Bamenda", to: "Yaoundé", distanceKm: 380, durationMin: 420 },
+      { from: "Douala", to: "Bamenda", distanceKm: 360, durationMin: 420 },
+      { from: "Bamenda", to: "Douala", distanceKm: 360, durationMin: 420 },
+      { from: "Douala", to: "Bafoussam", distanceKm: 210, durationMin: 240 },
+      { from: "Bafoussam", to: "Douala", distanceKm: 210, durationMin: 240 },
+      { from: "Douala", to: "Buea", distanceKm: 70, durationMin: 90 },
+      { from: "Buea", to: "Douala", distanceKm: 70, durationMin: 90 },
+      { from: "Buea", to: "Yaoundé", distanceKm: 320, durationMin: 360 },
+      { from: "Yaoundé", to: "Buea", distanceKm: 320, durationMin: 360 },
+      { from: "Yaoundé", to: "Bafoussam", distanceKm: 300, durationMin: 330 },
+      { from: "Bafoussam", to: "Yaoundé", distanceKm: 300, durationMin: 330 },
+    ];
+
+    // Sample route fares
+    const sampleRouteFares = [
+      {
+        route: "Yaoundé-Douala",
+        distanceKm: 245,
+        economy: 6000,
+        standard: 7000,
+        vip: 9000,
+      },
+      {
+        route: "Yaoundé-Bamenda",
+        distanceKm: 380,
+        economy: 6500,
+        standard: 7500,
+        vip: 9000,
+      },
+      {
+        route: "Douala-Bamenda",
+        distanceKm: 360,
+        economy: 6500,
+        standard: 7500,
+        vip: 9000,
+      },
+      {
+        route: "Douala-Bafoussam",
+        distanceKm: 210,
+        economy: 5000,
+        standard: 6000,
+        vip: 7500,
+      },
+      {
+        route: "Douala-Buea",
+        distanceKm: 70,
+        economy: 2500,
+        standard: 3000,
+        vip: 4000,
+      },
+    ];
+
+    // Agency route mappings (which agencies operate which routes)
+    const agencyRoutes = {
+      "amour mezam": [
+        { from: "Bamenda", to: "Yaoundé" },
+        { from: "Bamenda", to: "Douala" },
+        { from: "Bamenda", to: "Bafoussam" },
+      ],
+      "finexs voyages": [
+        { from: "Douala", to: "Yaoundé" },
+        { from: "Douala", to: "Bafoussam" },
+        { from: "Douala", to: "Bamenda" },
+      ],
+      "touristique express": [
+        { from: "Yaoundé", to: "Douala" },
+        { from: "Yaoundé", to: "Ngaoundéré" },
+        { from: "Ngaoundéré", to: "Garoua" },
+        { from: "Garoua", to: "Maroua" },
+      ],
+      "general express voyages": [
+        { from: "Douala", to: "Bafoussam" },
+        { from: "Douala", to: "Dschang" },
+      ],
+      "musango bus service": [
+        { from: "Buea", to: "Yaoundé" },
+        { from: "Buea", to: "Douala" },
+        { from: "Douala", to: "Yaoundé" },
+      ],
+      "united express": [
+        { from: "Douala", to: "Yaoundé" },
+        { from: "Yaoundé", to: "Douala" },
+      ],
+      "binam voyages": [
+        { from: "Yaoundé", to: "Bafoussam" },
+        { from: "Yaoundé", to: "Bamenda" },
+      ],
+      "moghamo express": [
+        { from: "Bamenda", to: "Yaoundé" },
+        { from: "Bamenda", to: "Douala" },
+        { from: "Bamenda", to: "Buea" },
+      ],
+      "garanti express": [
+        { from: "Yaoundé", to: "Douala" },
+        { from: "Yaoundé", to: "Bafoussam" },
+      ],
+      "oasis travel": [
+        { from: "Douala", to: "Yaoundé" },
+        { from: "Douala", to: "Bafoussam" },
+      ],
+    };
+
+    // Generate buses for the next 7 days only
+    const buses = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Schedule patterns (departure times in hours:minutes)
+    const schedulePatterns = {
+      "Yaoundé-Douala": [
+        "06:00",
+        "07:30",
+        "09:00",
+        "11:00",
+        "13:00",
+        "15:00",
+        "17:00",
+        "19:00",
+      ],
+      "Douala-Yaoundé": [
+        "06:00",
+        "08:00",
+        "10:00",
+        "12:00",
+        "14:00",
+        "16:00",
+        "18:00",
+        "20:00",
+      ],
+      "Buea-Yaoundé": ["07:00", "08:30", "10:30", "13:00", "15:30"],
+      default: ["07:00", "09:00", "11:00", "13:00", "15:00", "17:00"],
+    };
+
+    // Bus class distribution (some routes have economy/standard, some have standard/vip)
+    const getBusClassesForRoute = (agencyName, route) => {
+      const agencyLower = agencyName.toLowerCase();
+
+      if (agencyLower.includes("express") || agencyLower.includes("finexs")) {
+        return ["standard", "vip"];
+      }
+      if (agencyLower.includes("amour") || agencyLower.includes("musango")) {
+        return ["standard", "vip"];
+      }
+      if (agencyLower.includes("oasis")) {
+        return ["standard", "vip"];
+      }
+      return ["economy", "standard"];
+    };
+
+    let busCounter = 0; // Global counter to ensure unique bus numbers
+    
+    for (let day = 0; day < 7; day++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() + day);
+
+      // Iterate through each agency and their routes
+      Object.entries(agencyRoutes).forEach(([agencyName, routes]) => {
+        const agencyId = agencyMap[agencyName.toLowerCase()];
+        if (!agencyId) return;
+
+        routes.forEach((route) => {
+          const routeKey = `${route.from}-${route.to}`;
+          const routeData = routesData.find(
+            (r) => r.from === route.from && r.to === route.to
+          );
+
+          if (!routeData) return;
+
+          // Get schedule pattern for this route
+          const schedule =
+            schedulePatterns[routeKey] || schedulePatterns.default;
+          const busClasses = getBusClassesForRoute(agencyName, routeKey);
+
+          // Create buses for each departure time and each bus class
+          schedule.forEach((departureTime, index) => {
+            busClasses.forEach((busClass) => {
+              const [hours, minutes] = departureTime.split(":").map(Number);
+              const departure = new Date(date);
+              departure.setHours(hours, minutes, 0, 0);
+
+              const arrival = new Date(departure);
+              arrival.setMinutes(arrival.getMinutes() + routeData.durationMin);
+
+              const price = getPrice(
+                routeData.distanceKm,
+                busClass,
+                sampleRouteFares,
+                routeKey
+              );
+              const vipPrice = isVIP(busClass) ? price * 1.5 : price;
+
+              // Determine capacity based on bus class
+              const capacity = isVIP(busClass)
+                ? 30
+                : busClass === "economy"
+                ? 50
+                : 45;
+              const availableSeats = Math.floor(Math.random() * 15) + 10; // Random 10-25 seats available
+
+              // Generate unique bus number including route info and unique counter
+              busCounter++;
+              const routeCode = `${route.from.substring(0, 2)}${route.to.substring(0, 2)}`.toUpperCase().replace(/[^A-Z]/g, '');
+              const uniqueId = `${String(day + 1).padStart(2, "0")}${String(index + 1).padStart(2, "0")}${busClass.charAt(0).toUpperCase()}${String(busCounter).padStart(6, "0")}`;
+              buses.push({
+                agency: agencyId,
+                busNumber: `${agencyName
+                  .substring(0, 3)
+                  .toUpperCase()}-${routeCode}-${uniqueId}`,
+                type: getBusType(busClass),
+                route: {
+                  from: route.from,
+                  to: route.to,
+                },
+                departureTime: departure,
+                arrivalTime: arrival,
+                duration: routeData.durationMin,
+                totalSeats: capacity,
+                availableSeats: Math.min(availableSeats, capacity),
+                price: price,
+                vipPrice: vipPrice,
+                isVIP: isVIP(busClass),
+                amenities: convertAmenities(
+                  agencyRoutes[agencyName.toLowerCase()]
+                    ? agenciesData.find(
+                        (a) => a.name.toLowerCase() === agencyName.toLowerCase()
+                      )?.amenities || []
+                    : []
+                ),
+              });
+            });
+          });
+        });
+      });
+    }
+
+    await Bus.insertMany(buses);
+    console.log(`✅ Seeded ${buses.length} buses for the next 7 days`);
+
+    // Create a test admin user (optional)
+    const bcrypt = require("bcryptjs");
+    const testUser = {
+      name: "Admin User",
+      email: "admin@busbooking.com",
+      phone: "123456789",
+      password: await bcrypt.hash("admin123", 10),
+      role: "admin",
+      isVerified: true,
+      countryCode: "+237",
+    };
+
+    const existingAdmin = await User.findOne({ email: testUser.email });
+    let adminUser;
+    if (!existingAdmin) {
+      adminUser = await User.create(testUser);
+      console.log(
+        "✅ Seeded test admin user (admin@busbooking.com / admin123)"
+      );
+    } else {
+      adminUser = existingAdmin;
+      console.log("ℹ️  Admin user already exists");
+    }
+
+    // Create test bookings with booked seats
+    console.log("\n📦 Creating test bookings with booked seats...");
+    const { getStartOfDay } = require("../utils/helpers");
+    
+    // Use the buses we just created (they should be the only ones after cleanup)
+    const allBuses = await Bus.find();
+    console.log(`📦 Found ${allBuses.length} buses to create bookings for`);
+    
+    let bookingsCreated = 0;
+    let seatsCreated = 0;
+    const MAX_TOTAL_BOOKED_SEATS = 500; // Maximum total seats to book across all buses/dates (reduced for testing)
+
+    for (const bus of allBuses) {
+      // Stop if we've reached the maximum total booked seats
+      if (seatsCreated >= MAX_TOTAL_BOOKED_SEATS) {
+        break;
+      }
+      
+      // Create bookings for the next 7 days (including today)
+      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+        // Stop if we've reached the maximum total booked seats
+        if (seatsCreated >= MAX_TOTAL_BOOKED_SEATS) {
+          break;
+        }
+        
+        const bookingDate = new Date();
+        bookingDate.setDate(bookingDate.getDate() + dayOffset);
+        const routeDate = getStartOfDay(bookingDate);
+        
+        // Create bookings for 50% of bus+date combinations to ensure good coverage
+        if (Math.random() > 0.5) {
+          // Number of seats to book (between 5-20 seats, max 40% of bus capacity)
+          const maxSeatsToBook = Math.min(20, Math.floor(bus.totalSeats * 0.4));
+          const minSeatsToBook = Math.min(5, Math.floor(bus.totalSeats * 0.1));
+          let numSeatsToBook = Math.floor(Math.random() * (maxSeatsToBook - minSeatsToBook + 1)) + minSeatsToBook;
+          
+          // Don't exceed the total maximum
+          if (seatsCreated + numSeatsToBook > MAX_TOTAL_BOOKED_SEATS) {
+            numSeatsToBook = MAX_TOTAL_BOOKED_SEATS - seatsCreated;
+          }
+          
+          if (numSeatsToBook <= 0) break;
+          const bookedSeatNumbers = [];
+          const seatIds = [];
+          const passengers = [];
+
+          // Generate random seat numbers to book
+          for (let i = 0; i < numSeatsToBook && i < bus.totalSeats; i++) {
+            let seatNum;
+            do {
+              seatNum = (Math.floor(Math.random() * bus.totalSeats) + 1)
+                .toString()
+                .padStart(2, "0");
+            } while (bookedSeatNumbers.includes(seatNum));
+            bookedSeatNumbers.push(seatNum);
+          }
+
+          // Create Seat records for booked seats
+          for (const seatNum of bookedSeatNumbers) {
+            // Check if seat already exists
+            let seat = await Seat.findOne({
+              bus: bus._id,
+              seatNumber: seatNum,
+              bookingDate: routeDate,
+            });
+
+            if (!seat) {
+              // Determine seat type based on position (Window, Aisle, or Extra legroom)
+              const seatNumInt = parseInt(seatNum);
+              let seatType = "Window"; // Default
+              // Simple logic: seats ending in 1,4 are often window, 2,3 are aisle
+              const lastDigit = seatNumInt % 10;
+              if (lastDigit === 1 || lastDigit === 4) {
+                seatType = "Window";
+              } else if (lastDigit === 2 || lastDigit === 3) {
+                seatType = "Aisle";
+              }
+              
+              seat = await Seat.create({
+                bus: bus._id,
+                seatNumber: seatNum,
+                type: seatType,
+                bookingDate: routeDate,
+                isAvailable: false,
+                isBooked: true,
+              });
+              seatsCreated++;
+            } else {
+              // Update existing seat to booked
+              seat.isAvailable = false;
+              seat.isBooked = true;
+              await seat.save();
+            }
+            seatIds.push(seat._id);
+          }
+
+          // Create passengers for the booking
+          for (let i = 0; i < bookedSeatNumbers.length; i++) {
+            const genders = ["Male", "Female"];
+            passengers.push({
+              name: `Passenger ${i + 1}`,
+              age: Math.floor(Math.random() * 50) + 18,
+              seatNumber: bookedSeatNumbers[i],
+              gender: genders[Math.floor(Math.random() * genders.length)],
+            });
+          }
+
+          // Generate booking ID
+          const bookingId =
+            "BK" +
+            Date.now().toString().slice(-8) +
+            Math.random().toString(36).substring(2, 6).toUpperCase();
+
+          // Calculate total price
+          const seatPrice = bus.isVIP ? bus.vipPrice : bus.price;
+          const totalPrice = seatPrice * bookedSeatNumbers.length;
+
+          // Create booking
+          try {
+            await Booking.create({
+              user: adminUser._id,
+              bus: bus._id,
+              seats: seatIds,
+              passengers: passengers,
+              route: {
+                from: bus.route.from,
+                to: bus.route.to,
+                date: routeDate,
+                departureTime: bus.departureTime.toISOString(),
+                arrivalTime: bus.arrivalTime.toISOString(),
+              },
+              totalPrice: totalPrice,
+              status: "Confirmed",
+              bookingId: bookingId,
+              paymentMethod: "Cash",
+              paymentStatus: "Paid",
+            });
+
+            // Update bus available seats
+            bus.availableSeats = Math.max(
+              0,
+              bus.availableSeats - bookedSeatNumbers.length
+            );
+            await bus.save();
+
+            bookingsCreated++;
+          } catch (error) {
+            // Skip if booking already exists or other error
+            if (error.code !== 11000) {
+              console.log(`⚠️  Error creating booking: ${error.message}`);
+            }
+          }
+        }
+      }
+    }
+
+    console.log(
+      `✅ Created ${bookingsCreated} bookings with ${seatsCreated} booked seats (max: ${MAX_TOTAL_BOOKED_SEATS})`
+    );
+
+    // Summary
+    console.log("\n🎉 Database seeding completed successfully!");
+    console.log("\n📝 Summary:");
+    console.log(`   - Agencies: ${createdAgencies.length}`);
+    console.log(`   - Routes: ${routesData.length} unique routes`);
+    console.log(`   - Buses: ${buses.length} buses scheduled`);
+    console.log(`   - Bookings: ${bookingsCreated} bookings created`);
+    console.log(`   - Booked Seats: ${seatsCreated} seats marked as booked`);
+    console.log(`   - Test Admin: admin@busbooking.com / admin123`);
+    console.log(
+      "\n💡 You can now start using the application with real Cameroonian bus data!"
+    );
+    console.log("\n📌 Popular routes seeded:");
+    console.log("   - Yaoundé ↔ Douala");
+    console.log("   - Yaoundé ↔ Bamenda");
+    console.log("   - Douala ↔ Bamenda");
+    console.log("   - Douala ↔ Bafoussam");
+    console.log("   - Buea ↔ Yaoundé");
+    console.log("   - And many more...");
+
+    process.exit(0);
+  } catch (error) {
+    console.error("❌ Error seeding database:", error);
+    process.exit(1);
+  }
+};
+
+// Run seed
+seedData();

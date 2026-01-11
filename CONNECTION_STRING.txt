@@ -1,0 +1,8 @@
+MongoDB Atlas Connection String with Database Name:
+
+mongodb+srv://blessednur67:HOODQUAN67@cluster0.wftw5hq.mongodb.net/bus_booking_app?retryWrites=true&w=majority&appName=Cluster
+
+IMPORTANT: Add this to your .env file:
+MONGODB_URI=mongodb+srv://blessednur67:HOODQUAN67@cluster0.wftw5hq.mongodb.net/bus_booking_app?retryWrites=true&w=majority&appName=Cluster
+
+The database name "bus_booking_app" has been added before the query parameters (?).
