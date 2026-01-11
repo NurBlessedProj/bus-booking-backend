@@ -1,42 +1,26 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const config = require('../config/config');
 
-// Create transporter
-const transporter = nodemailer.createTransport({
-  host: config.email.host,
-  port: config.email.port,
-  secure: false, // true for 465, false for other ports
-  auth: {
-    user: config.email.user,
-    pass: config.email.pass,
-  },
-});
-
-// Verify transporter (only if email is configured)
-if (config.email.user && config.email.pass) {
-  transporter.verify((error, success) => {
-    if (error) {
-      console.log('❌ Email service not configured:', error.message);
-      console.log('⚠️  Email functionality will be disabled');
-    } else {
-      console.log('✅ Email service ready');
-    }
-  });
+// Initialize Resend client
+let resend = null;
+if (config.email.apiKey) {
+  resend = new Resend(config.email.apiKey);
+  console.log('✅ Resend email service initialized');
 } else {
-  console.log('⚠️  Email credentials not configured. Email functionality will be disabled.');
+  console.log('⚠️  Resend API key not configured. Email functionality will be disabled.');
 }
 
 // Send OTP email
 exports.sendOTPEmail = async (email, otp) => {
   // If email not configured, just log and return success
-  if (!config.email.user || !config.email.pass) {
+  if (!resend || !config.email.fromEmail) {
     console.log(`📧 OTP for ${email}: ${otp}`);
     return true;
   }
 
   try {
-    const mailOptions = {
-      from: `"${config.appName}" <${config.email.user}>`,
+    const { data, error } = await resend.emails.send({
+      from: config.email.fromEmail,
       to: email,
       subject: 'OTP Verification Code',
       html: `
@@ -50,10 +34,14 @@ exports.sendOTPEmail = async (email, otp) => {
           <p>If you didn't request this code, please ignore this email.</p>
         </div>
       `,
-    };
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ OTP email sent:', info.messageId);
+    if (error) {
+      console.error('❌ Error sending OTP email:', error);
+      return false;
+    }
+
+    console.log('✅ OTP email sent:', data?.id);
     return true;
   } catch (error) {
     console.error('❌ Error sending OTP email:', error);
@@ -64,7 +52,7 @@ exports.sendOTPEmail = async (email, otp) => {
 // Send password reset email
 exports.sendPasswordResetEmail = async (email, resetToken) => {
   // If email not configured, just log and return success
-  if (!config.email.user || !config.email.pass) {
+  if (!resend || !config.email.fromEmail) {
     console.log(`📧 Password reset token for ${email}: ${resetToken}`);
     console.log(`📱 Mobile app deep link: busbookingapp://reset-password?token=${resetToken}`);
     return true;
@@ -77,8 +65,8 @@ exports.sendPasswordResetEmail = async (email, resetToken) => {
       ? `${config.frontendUrl}/reset-password?token=${resetToken}`
       : `busbookingapp://reset-password?token=${resetToken}`;
     
-    const mailOptions = {
-      from: `"${config.appName}" <${config.email.user}>`,
+    const { data, error } = await resend.emails.send({
+      from: config.email.fromEmail,
       to: email,
       subject: 'Password Reset Request',
       html: `
@@ -94,10 +82,14 @@ exports.sendPasswordResetEmail = async (email, resetToken) => {
           <p>If you didn't request this, please ignore this email.</p>
         </div>
       `,
-    };
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Password reset email sent:', info.messageId);
+    if (error) {
+      console.error('❌ Error sending password reset email:', error);
+      return false;
+    }
+
+    console.log('✅ Password reset email sent:', data?.id);
     return true;
   } catch (error) {
     console.error('❌ Error sending password reset email:', error);
@@ -108,14 +100,14 @@ exports.sendPasswordResetEmail = async (email, resetToken) => {
 // Send booking confirmation email
 exports.sendBookingConfirmationEmail = async (email, booking) => {
   // If email not configured, just log and return success
-  if (!config.email.user || !config.email.pass) {
+  if (!resend || !config.email.fromEmail) {
     console.log(`📧 Booking confirmation for ${email}: ${booking.bookingId}`);
     return true;
   }
 
   try {
-    const mailOptions = {
-      from: `"${config.appName}" <${config.email.user}>`,
+    const { data, error } = await resend.emails.send({
+      from: config.email.fromEmail,
       to: email,
       subject: `Booking Confirmation - ${booking.bookingId}`,
       html: `
@@ -133,10 +125,14 @@ exports.sendBookingConfirmationEmail = async (email, booking) => {
           <p>Thank you for booking with us!</p>
         </div>
       `,
-    };
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Booking confirmation email sent:', info.messageId);
+    if (error) {
+      console.error('❌ Error sending booking confirmation email:', error);
+      return false;
+    }
+
+    console.log('✅ Booking confirmation email sent:', data?.id);
     return true;
   } catch (error) {
     console.error('❌ Error sending booking confirmation email:', error);
@@ -147,14 +143,14 @@ exports.sendBookingConfirmationEmail = async (email, booking) => {
 // Send booking cancellation email
 exports.sendBookingCancellationEmail = async (email, booking) => {
   // If email not configured, just log and return success
-  if (!config.email.user || !config.email.pass) {
+  if (!resend || !config.email.fromEmail) {
     console.log(`📧 Booking cancellation for ${email}: ${booking.bookingId}`);
     return true;
   }
 
   try {
-    const mailOptions = {
-      from: `"${config.appName}" <${config.email.user}>`,
+    const { data, error } = await resend.emails.send({
+      from: config.email.fromEmail,
       to: email,
       subject: `Booking Cancelled - ${booking.bookingId}`,
       html: `
@@ -169,10 +165,14 @@ exports.sendBookingCancellationEmail = async (email, booking) => {
           <p>We hope to see you again soon!</p>
         </div>
       `,
-    };
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Booking cancellation email sent:', info.messageId);
+    if (error) {
+      console.error('❌ Error sending booking cancellation email:', error);
+      return false;
+    }
+
+    console.log('✅ Booking cancellation email sent:', data?.id);
     return true;
   } catch (error) {
     console.error('❌ Error sending booking cancellation email:', error);

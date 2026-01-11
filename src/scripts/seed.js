@@ -3,8 +3,7 @@ const dotenv = require("dotenv");
 const Agency = require("../models/Agency.model");
 const Bus = require("../models/Bus.model");
 const User = require("../models/User.model");
-const Booking = require("../models/Booking.model");
-const Seat = require("../models/Seat.model");
+// Booking and Seat models not needed - user will create bookings themselves
 
 // Load environment variables
 dotenv.config();
@@ -503,165 +502,9 @@ const seedData = async () => {
       console.log("ℹ️  Admin user already exists");
     }
 
-    // Create test bookings with booked seats
-    console.log("\n📦 Creating test bookings with booked seats...");
-    const { getStartOfDay } = require("../utils/helpers");
-    
-    // Use the buses we just created (they should be the only ones after cleanup)
-    const allBuses = await Bus.find();
-    console.log(`📦 Found ${allBuses.length} buses to create bookings for`);
-    
-    let bookingsCreated = 0;
-    let seatsCreated = 0;
-    const MAX_TOTAL_BOOKED_SEATS = 500; // Maximum total seats to book across all buses/dates (reduced for testing)
-
-    for (const bus of allBuses) {
-      // Stop if we've reached the maximum total booked seats
-      if (seatsCreated >= MAX_TOTAL_BOOKED_SEATS) {
-        break;
-      }
-      
-      // Create bookings for the next 7 days (including today)
-      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-        // Stop if we've reached the maximum total booked seats
-        if (seatsCreated >= MAX_TOTAL_BOOKED_SEATS) {
-          break;
-        }
-        
-        const bookingDate = new Date();
-        bookingDate.setDate(bookingDate.getDate() + dayOffset);
-        const routeDate = getStartOfDay(bookingDate);
-        
-        // Create bookings for 50% of bus+date combinations to ensure good coverage
-        if (Math.random() > 0.5) {
-          // Number of seats to book (between 5-20 seats, max 40% of bus capacity)
-          const maxSeatsToBook = Math.min(20, Math.floor(bus.totalSeats * 0.4));
-          const minSeatsToBook = Math.min(5, Math.floor(bus.totalSeats * 0.1));
-          let numSeatsToBook = Math.floor(Math.random() * (maxSeatsToBook - minSeatsToBook + 1)) + minSeatsToBook;
-          
-          // Don't exceed the total maximum
-          if (seatsCreated + numSeatsToBook > MAX_TOTAL_BOOKED_SEATS) {
-            numSeatsToBook = MAX_TOTAL_BOOKED_SEATS - seatsCreated;
-          }
-          
-          if (numSeatsToBook <= 0) break;
-          const bookedSeatNumbers = [];
-          const seatIds = [];
-          const passengers = [];
-
-          // Generate random seat numbers to book
-          for (let i = 0; i < numSeatsToBook && i < bus.totalSeats; i++) {
-            let seatNum;
-            do {
-              seatNum = (Math.floor(Math.random() * bus.totalSeats) + 1)
-                .toString()
-                .padStart(2, "0");
-            } while (bookedSeatNumbers.includes(seatNum));
-            bookedSeatNumbers.push(seatNum);
-          }
-
-          // Create Seat records for booked seats
-          for (const seatNum of bookedSeatNumbers) {
-            // Check if seat already exists
-            let seat = await Seat.findOne({
-              bus: bus._id,
-              seatNumber: seatNum,
-              bookingDate: routeDate,
-            });
-
-            if (!seat) {
-              // Determine seat type based on position (Window, Aisle, or Extra legroom)
-              const seatNumInt = parseInt(seatNum);
-              let seatType = "Window"; // Default
-              // Simple logic: seats ending in 1,4 are often window, 2,3 are aisle
-              const lastDigit = seatNumInt % 10;
-              if (lastDigit === 1 || lastDigit === 4) {
-                seatType = "Window";
-              } else if (lastDigit === 2 || lastDigit === 3) {
-                seatType = "Aisle";
-              }
-              
-              seat = await Seat.create({
-                bus: bus._id,
-                seatNumber: seatNum,
-                type: seatType,
-                bookingDate: routeDate,
-                isAvailable: false,
-                isBooked: true,
-              });
-              seatsCreated++;
-            } else {
-              // Update existing seat to booked
-              seat.isAvailable = false;
-              seat.isBooked = true;
-              await seat.save();
-            }
-            seatIds.push(seat._id);
-          }
-
-          // Create passengers for the booking
-          for (let i = 0; i < bookedSeatNumbers.length; i++) {
-            const genders = ["Male", "Female"];
-            passengers.push({
-              name: `Passenger ${i + 1}`,
-              age: Math.floor(Math.random() * 50) + 18,
-              seatNumber: bookedSeatNumbers[i],
-              gender: genders[Math.floor(Math.random() * genders.length)],
-            });
-          }
-
-          // Generate booking ID
-          const bookingId =
-            "BK" +
-            Date.now().toString().slice(-8) +
-            Math.random().toString(36).substring(2, 6).toUpperCase();
-
-          // Calculate total price
-          const seatPrice = bus.isVIP ? bus.vipPrice : bus.price;
-          const totalPrice = seatPrice * bookedSeatNumbers.length;
-
-          // Create booking
-          try {
-            await Booking.create({
-              user: adminUser._id,
-              bus: bus._id,
-              seats: seatIds,
-              passengers: passengers,
-              route: {
-                from: bus.route.from,
-                to: bus.route.to,
-                date: routeDate,
-                departureTime: bus.departureTime.toISOString(),
-                arrivalTime: bus.arrivalTime.toISOString(),
-              },
-              totalPrice: totalPrice,
-              status: "Confirmed",
-              bookingId: bookingId,
-              paymentMethod: "Cash",
-              paymentStatus: "Paid",
-            });
-
-            // Update bus available seats
-            bus.availableSeats = Math.max(
-              0,
-              bus.availableSeats - bookedSeatNumbers.length
-            );
-            await bus.save();
-
-            bookingsCreated++;
-          } catch (error) {
-            // Skip if booking already exists or other error
-            if (error.code !== 11000) {
-              console.log(`⚠️  Error creating booking: ${error.message}`);
-            }
-          }
-        }
-      }
-    }
-
-    console.log(
-      `✅ Created ${bookingsCreated} bookings with ${seatsCreated} booked seats (max: ${MAX_TOTAL_BOOKED_SEATS})`
-    );
+    // Skip booking creation - user will book seats themselves for testing
+    console.log("\n📦 Skipping booking creation - you can book seats yourself!");
+    console.log("💡 All buses are available with all seats free for you to test booking.");
 
     // Summary
     console.log("\n🎉 Database seeding completed successfully!");
@@ -669,8 +512,7 @@ const seedData = async () => {
     console.log(`   - Agencies: ${createdAgencies.length}`);
     console.log(`   - Routes: ${routesData.length} unique routes`);
     console.log(`   - Buses: ${buses.length} buses scheduled`);
-    console.log(`   - Bookings: ${bookingsCreated} bookings created`);
-    console.log(`   - Booked Seats: ${seatsCreated} seats marked as booked`);
+    console.log(`   - Bookings: 0 (you can create bookings yourself!)`);
     console.log(`   - Test Admin: admin@busbooking.com / admin123`);
     console.log(
       "\n💡 You can now start using the application with real Cameroonian bus data!"

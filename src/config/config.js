@@ -9,12 +9,10 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'your_jwt_secret_key_here',
   jwtExpire: process.env.JWT_EXPIRE || '7d',
   
-  // Email
+  // Email (Resend)
   email: {
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: process.env.EMAIL_PORT || 587,
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    apiKey: process.env.RESEND_API_KEY,
+    fromEmail: process.env.RESEND_FROM_EMAIL, // Format: "App Name <noreply@yourdomain.com>"
   },
   
   // App
