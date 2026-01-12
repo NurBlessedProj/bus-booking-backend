@@ -3,6 +3,8 @@ const dotenv = require("dotenv");
 const Agency = require("../models/Agency.model");
 const Bus = require("../models/Bus.model");
 const User = require("../models/User.model");
+const Review = require("../models/Review.model");
+const Booking = require("../models/Booking.model");
 // Booking and Seat models not needed - user will create bookings themselves
 
 // Load environment variables
@@ -12,7 +14,8 @@ dotenv.config();
 const connectDB = async () => {
   try {
     await mongoose.connect(
-      process.env.MONGODB_URI || "mongodb+srv://blessednur67:HOODQUAN67@cluster0.wftw5hq.mongodb.net/bus_booking_app?retryWrites=true&w=majority&appName=Cluster0"
+      process.env.MONGODB_URI ||
+        "mongodb+srv://blessednur67:HOODQUAN67@cluster0.wftw5hq.mongodb.net/bus_booking_app?retryWrites=true&w=majority&appName=Cluster0"
     );
     console.log("✅ MongoDB Connected");
   } catch (error) {
@@ -83,6 +86,8 @@ const seedData = async () => {
     // Clear existing data (optional - comment out if you want to keep existing data)
     await Agency.deleteMany({});
     await Bus.deleteMany({});
+    await Review.deleteMany({});
+    await Booking.deleteMany({});
     console.log("🗑️  Cleared existing data");
 
     // Agencies data from Perplexity
@@ -91,7 +96,7 @@ const seedData = async () => {
         name: "Amour Mezam",
         description:
           "Reliable bus service connecting major cities in Cameroon, especially North-West region routes",
-        rating: 4.2,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities([
           "ac",
           "reclining_seats",
@@ -108,7 +113,7 @@ const seedData = async () => {
         name: "Finexs Voyages",
         description:
           "Premium express bus service with modern amenities including WiFi",
-        rating: 4.4,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities([
           "ac",
           "wifi",
@@ -126,7 +131,7 @@ const seedData = async () => {
         name: "Touristique Express",
         description:
           "Long-distance bus service connecting northern regions of Cameroon",
-        rating: 4.0,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities(["ac", "luggage", "entertainment"]),
         contact: {
           email: "info@touristiqueexpress.cm",
@@ -136,7 +141,7 @@ const seedData = async () => {
       {
         name: "General Express Voyages",
         description: "Reliable transportation service for western regions",
-        rating: 4.0,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities(["ac", "luggage"]),
         contact: {
           email: "contact@generalexpress.cm",
@@ -147,7 +152,7 @@ const seedData = async () => {
         name: "Musango Bus Service",
         description:
           "Quality bus service specializing in South-West region routes",
-        rating: 4.3,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities([
           "ac",
           "wifi",
@@ -164,7 +169,7 @@ const seedData = async () => {
         name: "United Express",
         description:
           "Modern bus service with premium amenities and online booking",
-        rating: 4.1,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities([
           "ac",
           "wifi",
@@ -181,7 +186,7 @@ const seedData = async () => {
         name: "Binam Voyages",
         description:
           "Affordable bus service connecting Yaoundé to western highlands",
-        rating: 3.8,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities(["ac", "luggage"]),
         contact: {
           email: "info@binamvoyages.cm",
@@ -192,7 +197,7 @@ const seedData = async () => {
         name: "Moghamo Express",
         description:
           "Reliable transportation from Bamenda to major destinations",
-        rating: 4.0,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities(["ac", "luggage"]),
         contact: {
           email: "contact@moghamoexpress.cm",
@@ -203,7 +208,7 @@ const seedData = async () => {
         name: "Garanti Express",
         description:
           "Comfortable bus service on Yaoundé-Douala and Yaoundé-Bafoussam routes",
-        rating: 3.9,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities(["ac", "luggage"]),
         contact: {
           email: "info@garantiexpress.cm",
@@ -213,7 +218,7 @@ const seedData = async () => {
       {
         name: "Oasis Travel",
         description: "Premium travel experience with VIP and standard options",
-        rating: 3.9,
+        rating: 0, // Will be calculated from reviews
         amenities: convertAmenities([
           "ac",
           "reclining_seats",
@@ -390,7 +395,7 @@ const seedData = async () => {
     };
 
     let busCounter = 0; // Global counter to ensure unique bus numbers
-    
+
     for (let day = 0; day < 7; day++) {
       const date = new Date(today);
       date.setDate(date.getDate() + day);
@@ -435,13 +440,16 @@ const seedData = async () => {
               const capacity = isVIP(busClass)
                 ? 30
                 : busClass === "economy"
-                ? 50
-                : 45;
+                  ? 50
+                  : 45;
               const availableSeats = Math.floor(Math.random() * 15) + 10; // Random 10-25 seats available
 
               // Generate unique bus number including route info and unique counter
               busCounter++;
-              const routeCode = `${route.from.substring(0, 2)}${route.to.substring(0, 2)}`.toUpperCase().replace(/[^A-Z]/g, '');
+              const routeCode =
+                `${route.from.substring(0, 2)}${route.to.substring(0, 2)}`
+                  .toUpperCase()
+                  .replace(/[^A-Z]/g, "");
               const uniqueId = `${String(day + 1).padStart(2, "0")}${String(index + 1).padStart(2, "0")}${busClass.charAt(0).toUpperCase()}${String(busCounter).padStart(6, "0")}`;
               buses.push({
                 agency: agencyId,
@@ -478,33 +486,191 @@ const seedData = async () => {
     await Bus.insertMany(buses);
     console.log(`✅ Seeded ${buses.length} buses for the next 7 days`);
 
-    // Create a test admin user (optional)
+    // Create test users for reviews
     const bcrypt = require("bcryptjs");
-    const testUser = {
-      name: "Admin User",
-      email: "admin@busbooking.com",
-      phone: "123456789",
-      password: await bcrypt.hash("admin123", 10),
-      role: "admin",
-      isVerified: true,
-      countryCode: "+237",
-    };
+    const testUsers = [
+      {
+        name: "Admin User",
+        email: "admin@busbooking.com",
+        phone: "123456789",
+        password: await bcrypt.hash("admin123", 10),
+        role: "admin",
+        isVerified: true,
+        countryCode: "+237",
+      },
+      {
+        name: "Marie Nkeng",
+        email: "marie@example.com",
+        phone: "677123456",
+        password: await bcrypt.hash("password123", 10),
+        role: "user",
+        isVerified: true,
+        countryCode: "+237",
+      },
+      {
+        name: "Jean Paul",
+        email: "jean@example.com",
+        phone: "677123457",
+        password: await bcrypt.hash("password123", 10),
+        role: "user",
+        isVerified: true,
+        countryCode: "+237",
+      },
+      {
+        name: "Sarah Tchoupa",
+        email: "sarah@example.com",
+        phone: "677123458",
+        password: await bcrypt.hash("password123", 10),
+        role: "user",
+        isVerified: true,
+        countryCode: "+237",
+      },
+      {
+        name: "Paul Kameni",
+        email: "paul@example.com",
+        phone: "677123459",
+        password: await bcrypt.hash("password123", 10),
+        role: "user",
+        isVerified: true,
+        countryCode: "+237",
+      },
+      {
+        name: "Amina Doudou",
+        email: "amina@example.com",
+        phone: "677123460",
+        password: await bcrypt.hash("password123", 10),
+        role: "user",
+        isVerified: true,
+        countryCode: "+237",
+      },
+    ];
 
-    const existingAdmin = await User.findOne({ email: testUser.email });
-    let adminUser;
-    if (!existingAdmin) {
-      adminUser = await User.create(testUser);
-      console.log(
-        "✅ Seeded test admin user (admin@busbooking.com / admin123)"
+    const createdUsers = [];
+    for (const userData of testUsers) {
+      const existingUser = await User.findOne({ email: userData.email });
+      if (!existingUser) {
+        const user = await User.create(userData);
+        createdUsers.push(user);
+      } else {
+        createdUsers.push(existingUser);
+      }
+    }
+    console.log(`✅ Seeded ${createdUsers.length} test users`);
+
+    // Create some bookings so users can review agencies
+    const bookings = [];
+    const userIndex = 1; // Start from index 1 (skip admin)
+
+    // Get some buses for each agency to create bookings
+    for (let i = 0; i < createdAgencies.length; i++) {
+      const agency = createdAgencies[i];
+      const agencyBuses = await Bus.find({ agency: agency._id }).limit(3);
+
+      if (agencyBuses.length > 0) {
+        // Create bookings for different users
+        for (let j = 0; j < Math.min(3, agencyBuses.length); j++) {
+          const bus = agencyBuses[j];
+          const user =
+            createdUsers[((userIndex + i + j) % (createdUsers.length - 1)) + 1]; // Skip admin
+
+          const booking = await Booking.create({
+            user: user._id,
+            bus: bus._id,
+            seats: [],
+            passengers: [
+              {
+                name: user.name,
+                age: 25,
+                seatNumber: "A1",
+                gender: "Male",
+              },
+            ],
+            route: {
+              from: bus.route.from,
+              to: bus.route.to,
+              date: bus.departureTime,
+              departureTime: bus.departureTime.toISOString(),
+              arrivalTime: bus.arrivalTime.toISOString(),
+            },
+            totalPrice: bus.price,
+            status: "Completed",
+            paymentStatus: "Paid",
+            bookingId: `BK${Date.now()}${Math.random().toString(36).substr(2, 9)}`,
+          });
+          bookings.push(booking);
+        }
+      }
+    }
+    console.log(`✅ Created ${bookings.length} bookings for review purposes`);
+
+    // Seed reviews for each agency
+    const reviewComments = [
+      "Excellent service! Very comfortable buses and punctual. Highly recommend.",
+      "Good experience overall. Buses are clean and staff is friendly.",
+      "Best bus service in Cameroon! Wi-Fi works well and seats are very comfortable.",
+      "Reliable and affordable. Would book again.",
+      "Decent service but could improve on punctuality.",
+      "Great value for money. Comfortable journey.",
+      "Professional service with modern amenities.",
+      "Very satisfied with the booking process and journey.",
+      "Clean buses and helpful staff. Will use again.",
+      "Good service, though could use more frequent departures.",
+    ];
+
+    const routes = [
+      "Yaoundé → Douala",
+      "Douala → Yaoundé",
+      "Yaoundé → Bamenda",
+      "Bamenda → Douala",
+      "Douala → Bafoussam",
+      "Buea → Yaoundé",
+      "Yaoundé → Buea",
+      "Bamenda → Yaoundé",
+    ];
+
+    const reviews = [];
+    for (let i = 0; i < createdAgencies.length; i++) {
+      const agency = createdAgencies[i];
+
+      // Get buses for this agency
+      const agencyBuses = await Bus.find({ agency: agency._id }).limit(5);
+      const agencyBookingsFiltered = bookings.filter((b) =>
+        agencyBuses.some((ab) => ab._id.toString() === b.bus?.toString())
       );
-    } else {
-      adminUser = existingAdmin;
-      console.log("ℹ️  Admin user already exists");
+
+      // Create 5-8 reviews per agency with different ratings
+      const numReviews = Math.floor(Math.random() * 4) + 5; // 5-8 reviews
+      const ratings = [5, 5, 4, 4, 4, 3, 3, 5]; // Mix of ratings
+
+      for (let j = 0; j < numReviews && j < createdUsers.length - 1; j++) {
+        const user =
+          createdUsers[((userIndex + i + j) % (createdUsers.length - 1)) + 1];
+        const rating = ratings[j % ratings.length];
+        const comment = reviewComments[(i + j) % reviewComments.length];
+        const route = routes[(i + j) % routes.length];
+
+        // Create review with a slight delay to ensure unique timestamps
+        const review = await Review.create({
+          user: user._id,
+          agency: agency._id,
+          rating: rating,
+          comment: comment,
+          route: route,
+          createdAt: new Date(Date.now() - j * 24 * 60 * 60 * 1000), // Stagger dates
+        });
+        reviews.push(review);
+      }
     }
 
-    // Skip booking creation - user will book seats themselves for testing
-    console.log("\n📦 Skipping booking creation - you can book seats yourself!");
-    console.log("💡 All buses are available with all seats free for you to test booking.");
+    console.log(
+      `✅ Seeded ${reviews.length} reviews across ${createdAgencies.length} agencies`
+    );
+
+    // Update agency ratings based on reviews
+    for (const agency of createdAgencies) {
+      await Review.updateAgencyRating(agency._id);
+    }
+    console.log("✅ Updated agency ratings from reviews");
 
     // Summary
     console.log("\n🎉 Database seeding completed successfully!");
@@ -512,8 +678,13 @@ const seedData = async () => {
     console.log(`   - Agencies: ${createdAgencies.length}`);
     console.log(`   - Routes: ${routesData.length} unique routes`);
     console.log(`   - Buses: ${buses.length} buses scheduled`);
-    console.log(`   - Bookings: 0 (you can create bookings yourself!)`);
+    console.log(`   - Users: ${createdUsers.length} test users`);
+    console.log(`   - Bookings: ${bookings.length} completed bookings`);
+    console.log(`   - Reviews: ${reviews.length} reviews`);
     console.log(`   - Test Admin: admin@busbooking.com / admin123`);
+    console.log(
+      `   - Test Users: marie@example.com, jean@example.com, etc. (password: password123)`
+    );
     console.log(
       "\n💡 You can now start using the application with real Cameroonian bus data!"
     );

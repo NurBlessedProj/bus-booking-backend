@@ -95,3 +95,10 @@ exports.createAgencyValidator = [
 exports.idValidator = [
   param('id').isMongoId().withMessage('Invalid ID format'),
 ];
+
+// Review validators
+exports.createReviewValidator = [
+  body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
+  body('comment').trim().notEmpty().withMessage('Comment is required').isLength({ max: 500 }).withMessage('Comment cannot exceed 500 characters'),
+  body('route').optional().trim(),
+];
